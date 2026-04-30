@@ -1,0 +1,1382 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Vector Hunt - Physics Game</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #101316;
+        color: #f5f7f2;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(180deg, #1c3d58 0%, #2e6d72 48%, #34543c 49%, #16241b 100%);
+      }
+
+      .game-shell {
+        width: min(1180px, calc(100vw - 24px));
+        margin: 0 auto;
+        padding: 16px 0;
+      }
+
+      .topbar,
+      .workspace,
+      .panel,
+      .bottom-panel {
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(8, 15, 18, 0.78);
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.26);
+      }
+
+      .topbar {
+        padding: 15px 18px;
+        border-radius: 8px;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(1.55rem, 3vw, 2.45rem);
+      }
+
+      .topbar p {
+        margin-top: 4px;
+        color: #d6e9df;
+      }
+
+      .hud-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 12px;
+      }
+
+      .hud-row span,
+      .readout p,
+      .physics-note,
+      .meter,
+      .instructions li {
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 8px 10px;
+      }
+
+      .hud-row span,
+      .readout p,
+      .meter {
+        white-space: nowrap;
+      }
+
+      .physics-note {
+        color: #e8f5ec;
+        font-size: 0.92rem;
+        line-height: 1.35;
+      }
+
+      .meter {
+        margin: 0;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: 290px 1fr;
+        gap: 14px;
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 8px;
+      }
+
+      .panel {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 14px;
+        border-radius: 8px;
+      }
+
+      .game-area {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .panel h2 {
+        font-size: 1rem;
+      }
+
+      label {
+        display: grid;
+        gap: 7px;
+        color: #f6f4dd;
+        font-size: 0.95rem;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: #ffcf48;
+      }
+
+      select {
+        min-height: 38px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 6px;
+        background: #172024;
+        color: #f5f7f2;
+        padding: 0 10px;
+        font-weight: 700;
+      }
+
+      output {
+        color: #bde8ff;
+        font-weight: 700;
+      }
+
+      button {
+        min-height: 40px;
+        border: 0;
+        border-radius: 6px;
+        background: #ffcf48;
+        color: #172024;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #ffe17b;
+      }
+
+      .readout,
+      .instructions {
+        display: grid;
+        gap: 8px;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .instructions ul {
+        display: grid;
+        gap: 7px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .instructions li {
+        font-size: 0.9rem;
+      }
+
+      .bottom-panel {
+        display: grid;
+        grid-template-columns: auto auto minmax(150px, 190px) repeat(3, auto) 1fr;
+        align-items: center;
+        gap: 10px;
+        padding: 12px;
+        border-radius: 8px;
+      }
+
+      .bottom-panel label {
+        gap: 4px;
+      }
+
+      .bottom-panel button,
+      .bottom-panel select {
+        min-height: 36px;
+      }
+
+      .how-to {
+        color: #d6e9df;
+        font-size: 0.92rem;
+        line-height: 1.3;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        max-height: calc(100vh - 230px);
+        min-height: 360px;
+        aspect-ratio: 16 / 9;
+        border-radius: 8px;
+        background: #7cc7e8;
+        cursor: crosshair;
+      }
+
+      @media (max-width: 860px) {
+        .topbar,
+        .workspace {
+          display: grid;
+        }
+
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .bottom-panel {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        canvas {
+          max-height: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="game-shell">
+      <section class="topbar" aria-label="Game title">
+        <div>
+          <h1>Vector Hunt</h1>
+          <p>A 2D physics game inspired by Duck Hunt.</p>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="panel" aria-label="Physics data">
+          <div id="duckReadout" class="readout" aria-live="polite">
+            <h2>Physics Data</h2>
+            <p>Dynamics: <strong>F = m*a</strong></p>
+            <p>Collisions: <strong>momentum conservation</strong></p>
+            <p>vx: <strong id="vx">0</strong> px/s</p>
+            <p>vy: <strong id="vy">0</strong> px/s</p>
+            <p>speed: <strong id="speed">0</strong> px/s</p>
+            <p>angle: <strong id="angle">0</strong> degrees</p>
+            <p>gravity: <strong id="gravityValue">330 px/s^2</strong></p>
+            <p>wind: <strong id="windValue">0 px/s^2</strong></p>
+            <p>collision: <strong id="collisionType">inelastic</strong></p>
+            <p>final velocity: <strong id="afterSpeed">0</strong> px/s</p>
+            <p>momentum: <strong id="momentumValue">p = m*v</strong></p>
+            <p>shot speed: <strong id="powerValue">0 px/s</strong></p>
+            <p>difficulty: <strong id="difficultyValue">Normal</strong></p>
+            <p>physics mode: <strong id="modeValue">Normal gravity</strong></p>
+          </div>
+
+          <div id="orbitalReadout" class="readout hidden" aria-live="polite">
+            <h2>Orbital Physics Data</h2>
+            <p>Orbital Mechanics: <strong>F = G(m1*m2)/r^2</strong></p>
+            <p>Dynamics: <strong>F = m*a</strong></p>
+            <p>distance r: <strong id="orbitDistance">0</strong> px</p>
+            <p>gravitational force F: <strong id="orbitForce">0</strong> N</p>
+            <p>acceleration a: <strong id="orbitAccel">0</strong> px/s^2</p>
+            <p>vx: <strong id="orbitVx">0</strong> px/s</p>
+            <p>vy: <strong id="orbitVy">0</strong> px/s</p>
+            <p>speed: <strong id="orbitSpeed">0</strong> px/s</p>
+            <p>body mass: <strong id="orbitBodyMass">0</strong> kg</p>
+            <p>planet mass: <strong id="orbitPlanetMass">0</strong> kg</p>
+            <p>status: <strong id="orbitStatus">Click to aim and launch</strong></p>
+          </div>
+        </aside>
+
+        <section class="game-area">
+          <canvas id="game" width="960" height="540" aria-label="Vector Hunt game"></canvas>
+          <div class="bottom-panel" aria-label="Game controls and status">
+            <button id="reset" type="button">Reset</button>
+            <button id="modeToggle" type="button">Mode: Duck Hunt</button>
+            <label>
+              Target Score
+              <select id="targetScore">
+                <option value="50">50 - Practice</option>
+                <option value="100" selected>100 - Normal</option>
+                <option value="150">150 - Heavy Drop</option>
+                <option value="200">200 - Storm</option>
+              </select>
+            </label>
+            <span>Score: <strong id="score">0</strong></span>
+            <span>Time: <strong id="time">60</strong>s</span>
+            <span>Misses: <strong id="misses">0</strong></span>
+            <p class="how-to">How to Play: move the mouse to aim, click to shoot. In Orbital Mode, aim at robotic space ducks and fire one laser at a time.</p>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const canvas = document.querySelector("#game");
+      const ctx = canvas.getContext("2d");
+
+      const scoreEl = document.querySelector("#score");
+      const timeEl = document.querySelector("#time");
+      const missesEl = document.querySelector("#misses");
+      const targetScoreEl = document.querySelector("#targetScore");
+      const powerValueEl = document.querySelector("#powerValue");
+      const gravityValueEl = document.querySelector("#gravityValue");
+      const windValueEl = document.querySelector("#windValue");
+      const difficultyValueEl = document.querySelector("#difficultyValue");
+      const modeValueEl = document.querySelector("#modeValue");
+      const vxEl = document.querySelector("#vx");
+      const vyEl = document.querySelector("#vy");
+      const speedEl = document.querySelector("#speed");
+      const momentumValueEl = document.querySelector("#momentumValue");
+      const angleEl = document.querySelector("#angle");
+      const collisionTypeEl = document.querySelector("#collisionType");
+      const afterSpeedEl = document.querySelector("#afterSpeed");
+      const resetEl = document.querySelector("#reset");
+      const modeToggleEl = document.querySelector("#modeToggle");
+      const duckReadoutEl = document.querySelector("#duckReadout");
+      const orbitalReadoutEl = document.querySelector("#orbitalReadout");
+      const orbitDistanceEl = document.querySelector("#orbitDistance");
+      const orbitForceEl = document.querySelector("#orbitForce");
+      const orbitAccelEl = document.querySelector("#orbitAccel");
+      const orbitVxEl = document.querySelector("#orbitVx");
+      const orbitVyEl = document.querySelector("#orbitVy");
+      const orbitSpeedEl = document.querySelector("#orbitSpeed");
+      const orbitBodyMassEl = document.querySelector("#orbitBodyMass");
+      const orbitPlanetMassEl = document.querySelector("#orbitPlanetMass");
+      const orbitStatusEl = document.querySelector("#orbitStatus");
+
+      const launcher = { x: 88, y: canvas.height - 72 };
+      const MIN_POWER = 120;
+      const MAX_POWER = 720;
+      const POWER_SCALE = 1.35;
+      const PROJECTILE_MASS = 1;
+      const DUCK_MASS = 8;
+      let currentMode = "duck";
+      const state = {
+        score: 0,
+        misses: 0,
+        timeLeft: 60,
+        aim: { x: 520, y: 250 },
+        projectile: null,
+        ducks: [],
+        inelasticBodies: [],
+        particles: [],
+        gameOver: false,
+        win: false,
+        lastDuckTime: 0,
+        nextDuckDelay: 900,
+        lastAfterSpeed: 0
+      };
+
+      const orbital = {
+        G: 1400,
+        planet: { x: canvas.width / 2, y: canvas.height / 2, mass: 4000, radius: 48 },
+        sling: { x: 88, y: canvas.height - 72 },
+        body: {
+          x: canvas.width / 2 + 185,
+          y: canvas.height / 2,
+          vx: 0,
+          vy: -245,
+          ax: 0,
+          ay: 0,
+          mass: 5,
+          radius: 8,
+          trail: [],
+          active: false
+        },
+        aim: { x: canvas.width / 2, y: canvas.height / 2 },
+        ducks: [],
+        hits: 0,
+        wave: 0,
+        isProjectileActive: false,
+        timeLeft: 60,
+        startedAt: performance.now(),
+        gameOver: false,
+        force: 0,
+        distance: 0,
+        acceleration: 0
+      };
+
+      let lastFrame = performance.now();
+      let timerStartedAt = performance.now();
+
+      function randomBetween(min, max) {
+        return min + Math.random() * (max - min);
+      }
+
+      function getTargetScore() {
+        return Number(targetScoreEl.value);
+      }
+
+      function getDifficulty() {
+        const target = getTargetScore();
+        if (target === 50) {
+          return {
+            name: "Facil",
+            mode: "Practice: low gravity",
+            gravity: 250,
+            windStrength: 30,
+            windRate: 1300,
+            duckScale: 0.9,
+            waveScale: 0.8,
+            minDelay: 1250,
+            maxDelay: 1900,
+            timeLimit: currentMode === "orbital" ? 55 : 75
+          };
+        }
+        if (target === 100) {
+          return {
+            name: "Normal",
+            mode: "Normal gravity",
+            gravity: 340,
+            windStrength: 90,
+            windRate: 1000,
+            duckScale: 1.05,
+            waveScale: 1,
+            minDelay: 850,
+            maxDelay: 1450,
+            timeLimit: currentMode === "orbital" ? 50 : 65
+          };
+        }
+        if (target === 150) {
+          return {
+            name: "Hard",
+            mode: "Heavy drop",
+            gravity: 500,
+            windStrength: 170,
+            windRate: 780,
+            duckScale: 1.35,
+            waveScale: 1.25,
+            minDelay: 560,
+            maxDelay: 980,
+            timeLimit: currentMode === "orbital" ? 48 : 60
+          };
+        }
+        return {
+          name: "Extreme",
+          mode: "Storm: shifting wind",
+          gravity: 610,
+          windStrength: 255,
+          windRate: 560,
+          duckScale: 1.65,
+          waveScale: 1.55,
+          minDelay: 380,
+          maxDelay: 760,
+          timeLimit: currentMode === "orbital" ? 45 : 60
+        };
+      }
+
+      function readPhysics() {
+        const difficulty = getDifficulty();
+        const wind = Math.sin(performance.now() / difficulty.windRate) * difficulty.windStrength;
+        return {
+          gravity: difficulty.gravity,
+          wind,
+          difficulty
+        };
+      }
+
+      function updateLabels() {
+        const physics = readPhysics();
+        const vector = getLaunchVector();
+        powerValueEl.textContent = `${Math.round(vector.speed)} px/s`;
+        gravityValueEl.textContent = `${Math.round(physics.gravity)} px/s^2`;
+        windValueEl.textContent = `${Math.round(physics.wind)} px/s^2`;
+        difficultyValueEl.textContent = physics.difficulty.name;
+        modeValueEl.textContent = physics.difficulty.mode;
+        vxEl.textContent = Math.round(vector.vx);
+        vyEl.textContent = Math.round(vector.vy);
+        speedEl.textContent = Math.round(vector.speed);
+        angleEl.textContent = Math.round(vector.angle);
+        collisionTypeEl.textContent = "inelastic e=0";
+        afterSpeedEl.textContent = Math.round(state.lastAfterSpeed);
+        momentumValueEl.textContent = `p = ${Math.round(DUCK_MASS * vector.speed)} kg*px/s`;
+        scoreEl.textContent = state.score;
+        missesEl.textContent = state.misses;
+        timeEl.textContent = Math.max(0, Math.ceil(state.timeLeft));
+      }
+
+      function getLaunchVector() {
+        const dx = state.aim.x - launcher.x;
+        const dy = state.aim.y - launcher.y;
+        const distance = Math.hypot(dx, dy) || 1;
+        const power = Math.max(MIN_POWER, Math.min(MAX_POWER, distance * POWER_SCALE));
+        const ux = dx / distance;
+        const uy = dy / distance;
+        const vx = ux * power;
+        const vy = uy * power;
+        return {
+          vx,
+          vy,
+          speed: Math.hypot(vx, vy),
+          angle: Math.atan2(-vy, vx) * 180 / Math.PI
+        };
+      }
+
+      function spawnDuck() {
+        const difficulty = getDifficulty();
+        const fromLeft = Math.random() > 0.5;
+        const y = randomBetween(72, canvas.height * 0.55);
+        const speed = randomBetween(95, 175) * difficulty.duckScale;
+        const verticalWave = randomBetween(18, 54) * difficulty.waveScale;
+        state.ducks.push({
+          x: fromLeft ? -60 : canvas.width + 60,
+          y,
+          baseY: y,
+          vx: fromLeft ? speed : -speed,
+          wave: verticalWave,
+          phase: randomBetween(0, Math.PI * 2),
+          radius: 28,
+          alive: true
+        });
+      }
+
+      function shoot() {
+        if (state.projectile || state.gameOver) return;
+        const vector = getLaunchVector();
+        state.projectile = {
+          x: launcher.x,
+          y: launcher.y,
+          vx: vector.vx,
+          vy: vector.vy,
+          radius: 7,
+          path: []
+        };
+      }
+
+      function resetGame() {
+        state.score = 0;
+        state.misses = 0;
+        state.timeLeft = getDifficulty().timeLimit;
+        state.projectile = null;
+        state.ducks = [];
+        state.inelasticBodies = [];
+        state.particles = [];
+        state.gameOver = false;
+        state.win = false;
+        state.lastDuckTime = performance.now();
+        state.lastAfterSpeed = 0;
+        const difficulty = getDifficulty();
+        state.nextDuckDelay = randomBetween(difficulty.minDelay, difficulty.maxDelay);
+        timerStartedAt = performance.now();
+        spawnDuck();
+        updateLabels();
+      }
+
+      function spawnOrbitalDucks() {
+        const target = getTargetScore();
+        const duckCount = target === 50 ? 3 : target === 100 ? 4 : target === 150 ? 6 : 8;
+        const speedScale = target === 50 ? 0.82 : target === 100 ? 0.95 : target === 150 ? 1.08 : 1.18;
+        orbital.wave += 1;
+        orbital.ducks = [];
+        for (let i = 0; i < duckCount; i++) {
+          const angle = i * Math.PI * 2 / duckCount + 0.45 + orbital.wave * 0.28;
+          const radius = 135 + (i % 4) * 28;
+          const x = orbital.planet.x + Math.cos(angle) * radius;
+          const y = orbital.planet.y + Math.sin(angle) * radius;
+          const tangentSpeed = (115 + i * 12) * speedScale;
+          orbital.ducks.push({
+            x,
+            y,
+            vx: -Math.sin(angle) * tangentSpeed,
+            vy: Math.cos(angle) * tangentSpeed,
+            ax: 0,
+            ay: 0,
+            mass: 7,
+            radius: 23,
+            phase: randomBetween(0, Math.PI * 2),
+            trail: []
+          });
+        }
+      }
+
+      function resetOrbit(x = orbital.aim.x, y = orbital.aim.y, resetScene = false, launch = true) {
+        if (resetScene) {
+          orbital.hits = 0;
+          orbital.wave = 0;
+          orbital.timeLeft = getDifficulty().timeLimit;
+          orbital.startedAt = performance.now();
+          orbital.gameOver = false;
+        }
+        if (resetScene || orbital.ducks.length === 0) {
+          spawnOrbitalDucks();
+        }
+        const body = orbital.body;
+        const dx = x - orbital.sling.x;
+        const dy = y - orbital.sling.y;
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        const speed = Math.max(190, Math.min(520, distance * 1.35));
+        body.x = orbital.sling.x;
+        body.y = orbital.sling.y;
+        body.vx = dx / distance * speed;
+        body.vy = dy / distance * speed;
+        body.ax = 0;
+        body.ay = 0;
+        body.trail = [];
+        body.active = launch;
+        orbital.isProjectileActive = launch;
+        if (!launch) {
+          body.x = orbital.sling.x;
+          body.y = orbital.sling.y;
+          body.vx = 0;
+          body.vy = 0;
+          orbital.isProjectileActive = false;
+        }
+        updateOrbitalReadout();
+      }
+
+      function setMode(mode) {
+        currentMode = mode;
+        const orbitalMode = currentMode === "orbital";
+        modeToggleEl.textContent = orbitalMode ? "Mode: Orbital Mode" : "Mode: Duck Hunt";
+        duckReadoutEl.classList.toggle("hidden", orbitalMode);
+        orbitalReadoutEl.classList.toggle("hidden", !orbitalMode);
+        canvas.style.background = orbitalMode ? "#10151d" : "#7cc7e8";
+        if (orbitalMode) resetOrbit(undefined, undefined, true, false);
+        else resetGame();
+      }
+
+      function makeInelasticBody(projectile, duck) {
+        const combinedMass = PROJECTILE_MASS + DUCK_MASS;
+        const vx = (PROJECTILE_MASS * projectile.vx + DUCK_MASS * duck.vx) / combinedMass;
+        const vy = (PROJECTILE_MASS * projectile.vy) / combinedMass;
+        state.lastAfterSpeed = Math.hypot(vx, vy);
+        state.inelasticBodies.push({
+          x: duck.x,
+          y: duck.y,
+          vx,
+          vy,
+          radius: duck.radius,
+          direction: Math.sign(duck.vx) || 1,
+          stuckX: projectile.x - duck.x,
+          stuckY: projectile.y - duck.y
+        });
+      }
+
+      function createHitParticles(x, y) {
+        for (let i = 0; i < 18; i++) {
+          const angle = randomBetween(0, Math.PI * 2);
+          const speed = randomBetween(70, 220);
+          state.particles.push({
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: randomBetween(0.35, 0.8)
+          });
+        }
+      }
+
+      function update(dt, now) {
+        state.timeLeft = getDifficulty().timeLimit - (now - timerStartedAt) / 1000;
+        if (state.timeLeft <= 0) {
+          state.timeLeft = 0;
+          state.gameOver = true;
+        }
+
+        if (!state.gameOver && now - state.lastDuckTime > state.nextDuckDelay) {
+          const difficulty = getDifficulty();
+          spawnDuck();
+          state.lastDuckTime = now;
+          state.nextDuckDelay = randomBetween(difficulty.minDelay, difficulty.maxDelay);
+        }
+
+        for (const duck of state.ducks) {
+          duck.x += duck.vx * dt;
+          duck.phase += dt * 4.2;
+          duck.y = duck.baseY + Math.sin(duck.phase) * duck.wave;
+        }
+
+        state.ducks = state.ducks.filter((duck) => duck.x > -120 && duck.x < canvas.width + 120 && duck.alive);
+
+        const physics = readPhysics();
+        for (const body of state.inelasticBodies) {
+          body.vx += physics.wind * 0.25 * dt;
+          body.vy += physics.gravity * dt;
+          body.x += body.vx * dt;
+          body.y += body.vy * dt;
+        }
+        state.inelasticBodies = state.inelasticBodies.filter((body) => body.y < canvas.height + 130);
+
+        if (state.projectile) {
+          const p = state.projectile;
+          p.vx += physics.wind * dt;
+          p.vy += physics.gravity * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.path.push({ x: p.x, y: p.y });
+          if (p.path.length > 45) p.path.shift();
+
+          for (const duck of state.ducks) {
+            const hitDistance = Math.hypot(p.x - duck.x, p.y - duck.y);
+            if (hitDistance < duck.radius + p.radius) {
+              makeInelasticBody(p, duck);
+              duck.alive = false;
+              state.projectile = null;
+              state.score += 10;
+              if (state.score >= getTargetScore()) {
+                state.win = true;
+                state.gameOver = true;
+              }
+              createHitParticles(duck.x, duck.y);
+              break;
+            }
+          }
+
+          if (state.projectile && (p.x < -40 || p.x > canvas.width + 40 || p.y > canvas.height + 40 || p.y < -120)) {
+            state.projectile = null;
+            state.misses += 1;
+          }
+        }
+
+        for (const particle of state.particles) {
+          particle.life -= dt;
+          particle.vy += 260 * dt;
+          particle.x += particle.vx * dt;
+          particle.y += particle.vy * dt;
+        }
+        state.particles = state.particles.filter((particle) => particle.life > 0);
+        updateLabels();
+      }
+
+      function applyOrbitalGravity(object, dt) {
+        const planet = orbital.planet;
+
+        // Newtonian gravitation:
+        // 1. Direction vector from the small body to the planet.
+        const dx = planet.x - object.x;
+        const dy = planet.y - object.y;
+        const r = Math.max(planet.radius + object.radius, Math.hypot(dx, dy));
+        const ux = dx / r;
+        const uy = dy / r;
+
+        // 2. Force magnitude: F = G * (m1 * m2) / r^2.
+        const force = orbital.G * (planet.mass * object.mass) / (r * r);
+
+        // 3. Convert force to acceleration for the orbiting body: a = F / m.
+        object.ax = (force / object.mass) * ux;
+        object.ay = (force / object.mass) * uy;
+
+        // 4. Integrate acceleration into velocity, then velocity into position.
+        object.vx += object.ax * dt;
+        object.vy += object.ay * dt;
+        object.x += object.vx * dt;
+        object.y += object.vy * dt;
+
+        return { force, r, ux, uy };
+      }
+
+      function updateOrbital(dt) {
+        const planet = orbital.planet;
+        const body = orbital.body;
+        const difficulty = getDifficulty();
+        orbital.timeLeft = difficulty.timeLimit - (performance.now() - orbital.startedAt) / 1000;
+        if (orbital.hits * 10 >= getTargetScore()) {
+          orbital.gameOver = true;
+        }
+        if (orbital.timeLeft <= 0) {
+          orbital.timeLeft = 0;
+          orbital.gameOver = true;
+        }
+
+        scoreEl.textContent = orbital.hits * 10;
+        timeEl.textContent = Math.max(0, Math.ceil(orbital.timeLeft));
+        missesEl.textContent = body.active ? 0 : 0;
+
+        if (orbital.gameOver) {
+          body.active = false;
+          orbital.isProjectileActive = false;
+          scoreEl.textContent = orbital.hits * 10;
+          timeEl.textContent = Math.max(0, Math.ceil(orbital.timeLeft));
+          updateOrbitalReadout();
+          return;
+        }
+
+        for (const duck of orbital.ducks) {
+          applyOrbitalGravity(duck, dt);
+          duck.phase += dt * 7;
+          duck.trail.push({ x: duck.x, y: duck.y });
+          if (duck.trail.length > 80) duck.trail.shift();
+        }
+
+        if (body.active) {
+          for (const duck of [...orbital.ducks]) {
+            if (Math.hypot(body.x - duck.x, body.y - duck.y) < body.radius + duck.radius) {
+              orbital.ducks = orbital.ducks.filter((item) => item !== duck);
+              orbital.hits += 1;
+              if (orbital.hits * 10 >= getTargetScore()) {
+                orbital.gameOver = true;
+                body.active = false;
+                orbital.isProjectileActive = false;
+                scoreEl.textContent = orbital.hits * 10;
+                timeEl.textContent = Math.max(0, Math.ceil(orbital.timeLeft));
+                updateOrbitalReadout();
+                return;
+              }
+              resetOrbit(undefined, undefined, false, false);
+              break;
+            }
+          }
+        }
+
+        if (orbital.ducks.length === 0 && !orbital.gameOver) spawnOrbitalDucks();
+
+        if (!body.active) {
+          orbital.force = 0;
+          orbital.distance = Math.hypot(planet.x - orbital.aim.x, planet.y - orbital.aim.y);
+          orbital.acceleration = 0;
+          scoreEl.textContent = orbital.hits * 10;
+          timeEl.textContent = Math.max(0, Math.ceil(orbital.timeLeft));
+          updateOrbitalReadout();
+          return;
+        }
+
+        const bodyGravity = applyOrbitalGravity(body, dt);
+
+        if (body.x < -120 || body.x > canvas.width + 120 || body.y < -120 || body.y > canvas.height + 120) {
+          body.active = false;
+          orbital.isProjectileActive = false;
+          body.trail = [];
+          body.x = orbital.sling.x;
+          body.y = orbital.sling.y;
+          body.vx = 0;
+          body.vy = 0;
+          scoreEl.textContent = orbital.hits * 10;
+          timeEl.textContent = Math.max(0, Math.ceil(orbital.timeLeft));
+          updateOrbitalReadout();
+          return;
+        }
+
+        if (bodyGravity.r <= planet.radius + body.radius + 1) {
+          body.active = false;
+          orbital.isProjectileActive = false;
+          body.trail = [];
+          body.x = orbital.sling.x;
+          body.y = orbital.sling.y;
+          body.vx = 0;
+          body.vy = 0;
+          scoreEl.textContent = orbital.hits * 10;
+          timeEl.textContent = Math.max(0, Math.ceil(orbital.timeLeft));
+          updateOrbitalReadout();
+          return;
+        }
+
+        body.trail.push({ x: body.x, y: body.y });
+        if (body.trail.length > 8) body.trail.shift();
+
+        orbital.force = bodyGravity.force;
+        orbital.distance = bodyGravity.r;
+        orbital.acceleration = Math.hypot(body.ax, body.ay);
+        scoreEl.textContent = orbital.hits * 10;
+        timeEl.textContent = Math.max(0, Math.ceil(orbital.timeLeft));
+        updateOrbitalReadout();
+      }
+
+      function updateOrbitalReadout() {
+        const body = orbital.body;
+        orbitDistanceEl.textContent = orbital.distance.toFixed(1);
+        orbitForceEl.textContent = orbital.force.toFixed(1);
+        orbitAccelEl.textContent = orbital.acceleration.toFixed(1);
+        orbitVxEl.textContent = body.vx.toFixed(1);
+        orbitVyEl.textContent = body.vy.toFixed(1);
+        orbitSpeedEl.textContent = Math.hypot(body.vx, body.vy).toFixed(1);
+        orbitBodyMassEl.textContent = body.mass.toFixed(1);
+        orbitPlanetMassEl.textContent = orbital.planet.mass.toFixed(0);
+        if (orbital.gameOver) {
+          orbitStatusEl.textContent = orbital.hits * 10 >= getTargetScore() ? "Target Reached" : "Time Over";
+        } else {
+          orbitStatusEl.textContent = orbital.isProjectileActive ? "Only one shot at a time" : "Click to aim and launch";
+        }
+      }
+
+      function drawBackground() {
+        const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        sky.addColorStop(0, "#8fd7ff");
+        sky.addColorStop(0.62, "#d8f2ff");
+        sky.addColorStop(0.63, "#69a950");
+        sky.addColorStop(1, "#26492d");
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+        drawCloud(170, 92, 1.1);
+        drawCloud(685, 118, 0.86);
+
+        ctx.fillStyle = "#365527";
+        for (let x = 0; x < canvas.width; x += 34) {
+          ctx.beginPath();
+          ctx.moveTo(x, canvas.height);
+          ctx.lineTo(x + 17, canvas.height - randomGrassHeight(x));
+          ctx.lineTo(x + 34, canvas.height);
+          ctx.fill();
+        }
+      }
+
+      function randomGrassHeight(x) {
+        return 30 + (Math.sin(x * 12.9898) * 0.5 + 0.5) * 40;
+      }
+
+      function drawCloud(x, y, scale) {
+        ctx.beginPath();
+        ctx.ellipse(x, y, 42 * scale, 20 * scale, 0, 0, Math.PI * 2);
+        ctx.ellipse(x + 34 * scale, y + 4 * scale, 36 * scale, 17 * scale, 0, 0, Math.PI * 2);
+        ctx.ellipse(x - 35 * scale, y + 7 * scale, 32 * scale, 15 * scale, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function drawDuck(duck) {
+        const direction = Math.sign(duck.vx) || 1;
+        const flap = Math.sin(duck.phase || performance.now() / 120);
+        ctx.save();
+        ctx.translate(duck.x, duck.y);
+        ctx.scale(direction, 1);
+
+        ctx.fillStyle = "#7a4d2a";
+        ctx.beginPath();
+        ctx.ellipse(0, 6, 28, 18, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#1f7a46";
+        ctx.beginPath();
+        ctx.arc(24, -9, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#f1c04e";
+        ctx.beginPath();
+        ctx.moveTo(37, -9);
+        ctx.lineTo(55, -15);
+        ctx.lineTo(55, -3);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = "#2f1b11";
+        ctx.beginPath();
+        ctx.ellipse(-8, 2, 16, 9, -0.35, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#593017";
+        ctx.save();
+        ctx.translate(-10, 0);
+        ctx.rotate(-0.35 + flap * 0.45);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 22, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        if (duck.hit) {
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(24, -17);
+          ctx.lineTo(32, -9);
+          ctx.moveTo(32, -17);
+          ctx.lineTo(24, -9);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(28, -13, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#111111";
+          ctx.beginPath();
+          ctx.arc(29, -13, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.52)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 6, duck.radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      function drawInelasticBody(body) {
+        drawDuck({
+          x: body.x,
+          y: body.y,
+          vx: body.direction,
+          radius: body.radius,
+          hit: true,
+          phase: performance.now() / 180
+        });
+
+        ctx.fillStyle = "#14181a";
+        ctx.beginPath();
+        ctx.arc(body.x + body.stuckX, body.y + body.stuckY, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 14px Arial";
+        ctx.fillText("inelastica e=0", body.x - 45, body.y - 38);
+        drawVectorArrow(body.x, body.y, body.x + body.vx * 0.18, body.y + body.vy * 0.18, "#ffffff", "vf");
+      }
+
+      function drawLauncher() {
+        const vector = getLaunchVector();
+        const angle = Math.atan2(vector.vy, vector.vx);
+
+        ctx.save();
+        ctx.translate(launcher.x, launcher.y);
+        ctx.rotate(angle);
+        ctx.fillStyle = "#252b2c";
+        ctx.fillRect(0, -8, 54, 16);
+        ctx.fillStyle = "#f6b445";
+        ctx.fillRect(38, -5, 20, 10);
+        ctx.restore();
+
+        ctx.fillStyle = "#202425";
+        ctx.beginPath();
+        ctx.arc(launcher.x, launcher.y, 24, 0, Math.PI * 2);
+        ctx.fill();
+
+        drawVectorArrow(launcher.x, launcher.y, launcher.x + vector.vx * 0.18, launcher.y + vector.vy * 0.18, "#ffdb57", "v");
+      }
+
+      function drawVectorArrow(x1, y1, x2, y2, color, label) {
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - 14 * Math.cos(angle - 0.45), y2 - 14 * Math.sin(angle - 0.45));
+        ctx.lineTo(x2 - 14 * Math.cos(angle + 0.45), y2 - 14 * Math.sin(angle + 0.45));
+        ctx.closePath();
+        ctx.fill();
+        ctx.font = "700 18px Arial";
+        ctx.fillText(label, x2 + 8, y2 - 8);
+      }
+
+      function drawProjectile() {
+        const p = state.projectile;
+        if (!p) return;
+
+        ctx.strokeStyle = "rgba(255, 207, 72, 0.55)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        p.path.forEach((point, index) => {
+          if (index === 0) ctx.moveTo(point.x, point.y);
+          else ctx.lineTo(point.x, point.y);
+        });
+        ctx.stroke();
+
+        ctx.fillStyle = "#14181a";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        drawVectorArrow(p.x, p.y, p.x + p.vx * 0.08, p.y + p.vy * 0.08, "#de3d5a", "vp");
+      }
+
+      function drawParticles() {
+        for (const particle of state.particles) {
+          ctx.globalAlpha = Math.max(0, particle.life);
+          ctx.fillStyle = "#ffcf48";
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function drawGameOver() {
+        if (!state.gameOver) return;
+        ctx.fillStyle = "rgba(9, 13, 15, 0.72)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.font = "800 52px Arial";
+        ctx.fillText(state.win ? "Target Reached" : "Time Over", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.font = "700 26px Arial";
+        ctx.fillText(`Final Score: ${state.score} / ${getTargetScore()}`, canvas.width / 2, canvas.height / 2 + 28);
+        ctx.font = "18px Arial";
+        ctx.fillText("Press Reset to play again", canvas.width / 2, canvas.height / 2 + 64);
+        ctx.textAlign = "left";
+      }
+
+      function drawSpaceDuck(duck) {
+        const direction = Math.sign(duck.vx) || 1;
+        const wing = Math.sin(duck.phase) * 0.28;
+        ctx.save();
+        ctx.translate(duck.x, duck.y);
+        ctx.scale(direction, 1);
+
+        ctx.fillStyle = "#9aa8b6";
+        ctx.strokeStyle = "#d8f7ff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 6, 29, 17, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#6d7d8d";
+        ctx.save();
+        ctx.translate(-10, 0);
+        ctx.rotate(-0.25 + wing);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 21, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = "#7fb2c8";
+        ctx.beginPath();
+        ctx.arc(24, -9, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffcf48";
+        ctx.beginPath();
+        ctx.moveTo(37, -9);
+        ctx.lineTo(54, -15);
+        ctx.lineTo(54, -3);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = "#10151d";
+        ctx.fillRect(20, -15, 14, 7);
+        ctx.fillStyle = "#7dffcb";
+        ctx.fillRect(22, -13, 3, 3);
+        ctx.fillRect(29, -13, 3, 3);
+
+        ctx.strokeStyle = "rgba(180, 240, 255, 0.9)";
+        ctx.beginPath();
+        ctx.arc(24, -9, 21, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      function drawLaserSlingshot() {
+        const sling = orbital.sling;
+        const body = orbital.body;
+        const aim = body.active ? body : orbital.aim;
+        ctx.strokeStyle = "#d8f7ff";
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.moveTo(sling.x - 18, sling.y + 26);
+        ctx.lineTo(sling.x, sling.y);
+        ctx.lineTo(sling.x + 18, sling.y + 26);
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(255, 207, 72, 0.65)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(sling.x, sling.y);
+        ctx.lineTo(aim.x, aim.y);
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffcf48";
+        ctx.font = "700 14px Arial";
+        ctx.fillText("laser slingshot", sling.x - 44, sling.y + 48);
+      }
+
+      function drawOrientedLaser() {
+        const body = orbital.body;
+        const angle = Math.atan2(body.vy, body.vx);
+
+        ctx.save();
+        ctx.translate(body.x, body.y);
+        ctx.rotate(angle);
+        ctx.strokeStyle = "#ffcf48";
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(-18, 0);
+        ctx.lineTo(18, 0);
+        ctx.stroke();
+
+        ctx.fillStyle = "#fff2a8";
+        ctx.beginPath();
+        ctx.moveTo(24, 0);
+        ctx.lineTo(10, -7);
+        ctx.lineTo(10, 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawOrbitalMode() {
+        const planet = orbital.planet;
+        const body = orbital.body;
+
+        ctx.fillStyle = "#10151d";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+        ctx.lineWidth = 1;
+        for (let x = 0; x < canvas.width; x += 48) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+          ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height; y += 48) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+          ctx.stroke();
+        }
+
+        if (body.active && body.trail.length > 1) {
+          ctx.strokeStyle = "rgba(255, 207, 72, 0.35)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          body.trail.forEach((point, index) => {
+            if (index === 0) ctx.moveTo(point.x, point.y);
+            else ctx.lineTo(point.x, point.y);
+          });
+          ctx.stroke();
+        }
+
+        for (const duck of orbital.ducks) {
+          if (duck.trail.length > 1) {
+            ctx.strokeStyle = "rgba(140, 247, 255, 0.24)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            duck.trail.forEach((point, index) => {
+              if (index === 0) ctx.moveTo(point.x, point.y);
+              else ctx.lineTo(point.x, point.y);
+            });
+            ctx.stroke();
+          }
+        }
+
+        const glow = ctx.createRadialGradient(planet.x, planet.y, 8, planet.x, planet.y, 110);
+        glow.addColorStop(0, "rgba(119, 227, 255, 0.98)");
+        glow.addColorStop(0.42, "rgba(33, 101, 146, 0.72)");
+        glow.addColorStop(1, "rgba(33, 101, 146, 0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(planet.x, planet.y, 110, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#1f6f9f";
+        ctx.beginPath();
+        ctx.arc(planet.x, planet.y, planet.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#8cf7ff";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        for (const duck of orbital.ducks) drawSpaceDuck(duck);
+
+        drawLaserSlingshot();
+
+        if (body.active) {
+          drawOrientedLaser();
+
+          drawVectorArrow(body.x, body.y, body.x + body.vx * 0.18, body.y + body.vy * 0.18, "#ffdb57", "v");
+          drawVectorArrow(body.x, body.y, body.x + body.ax * 0.65, body.y + body.ay * 0.65, "#8cf7ff", "Fg");
+        }
+
+        if (orbital.gameOver) {
+          ctx.fillStyle = "rgba(9, 13, 15, 0.72)";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "800 48px Arial";
+          ctx.fillText(orbital.hits * 10 >= getTargetScore() ? "Target Reached" : "Time Over", canvas.width / 2, canvas.height / 2 - 12);
+          ctx.font = "700 24px Arial";
+          ctx.fillText(`Final Score: ${orbital.hits * 10} / ${getTargetScore()}`, canvas.width / 2, canvas.height / 2 + 30);
+          ctx.font = "18px Arial";
+          ctx.fillText("Press Reset to play again", canvas.width / 2, canvas.height / 2 + 62);
+          ctx.textAlign = "left";
+        }
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 22px Arial";
+        ctx.fillText(`Orbital Mode - Robotic Ducks: ${orbital.ducks.length}`, 22, 36);
+        ctx.font = "16px Arial";
+        ctx.fillText("Aim at the ducks and fire 1 laser. Black-hole gravity curves the shot.", 22, 62);
+      }
+
+      function draw() {
+        if (currentMode === "orbital") {
+          drawOrbitalMode();
+          return;
+        }
+        drawBackground();
+        for (const duck of state.ducks) drawDuck(duck);
+        for (const body of state.inelasticBodies) drawInelasticBody(body);
+        drawLauncher();
+        drawProjectile();
+        drawParticles();
+        drawGameOver();
+      }
+
+      function frame(now) {
+        const dt = Math.min((now - lastFrame) / 1000, 0.033);
+        lastFrame = now;
+        if (currentMode === "orbital") updateOrbital(dt);
+        else update(dt, now);
+        draw();
+        requestAnimationFrame(frame);
+      }
+
+      function setAimFromPointer(event) {
+        const rect = canvas.getBoundingClientRect();
+        if (currentMode === "orbital") {
+          orbital.aim.x = (event.clientX - rect.left) * (canvas.width / rect.width);
+          orbital.aim.y = (event.clientY - rect.top) * (canvas.height / rect.height);
+          return;
+        }
+        state.aim.x = (event.clientX - rect.left) * (canvas.width / rect.width);
+        state.aim.y = (event.clientY - rect.top) * (canvas.height / rect.height);
+        updateLabels();
+      }
+
+      canvas.addEventListener("pointermove", setAimFromPointer);
+      canvas.addEventListener("pointerdown", (event) => {
+        if (currentMode === "orbital") {
+          if (orbital.gameOver) return;
+          if (orbital.isProjectileActive) return;
+          const rect = canvas.getBoundingClientRect();
+          const x = (event.clientX - rect.left) * (canvas.width / rect.width);
+          const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+          resetOrbit(x, y, false, true);
+          return;
+        }
+        setAimFromPointer(event);
+        shoot();
+      });
+
+      resetEl.addEventListener("click", () => {
+        if (currentMode === "orbital") resetOrbit(undefined, undefined, true, false);
+        else resetGame();
+      });
+      modeToggleEl.addEventListener("click", () => {
+        setMode(currentMode === "duck" ? "orbital" : "duck");
+      });
+      targetScoreEl.addEventListener("change", () => {
+        if (currentMode === "duck") resetGame();
+        else resetOrbit(undefined, undefined, true, false);
+      });
+
+      resetGame();
+      requestAnimationFrame(frame);
+    </script>
+    <!--
+      Physics Explanation
+
+      1. Dynamics (F = m*a):
+      In Duck Hunt mode, the shot is updated using velocity, gravity and wind acceleration.
+      In Orbital Mode, the laser and the space ducks get their net force from Newtonian
+      gravity. The code converts that force into acceleration using a = F / m, then updates
+      velocity and position. The isProjectileActive variable makes the laser behave like a
+      single slingshot shot: it does not move until the player clicks, and no second shot can
+      launch until the first one hits something or leaves the screen.
+
+      2. Collisions (momentum conservation, inelastic collision):
+      When the shot hits a duck, the game creates an inelastic collision body. The final
+      velocity is based on total momentum:
+      vf = (m_projectile * v_projectile + m_duck * v_duck) / (m_projectile + m_duck).
+      This is why the projectile and duck move together after impact.
+
+      3. Orbital Mechanics:
+      Orbital Mode uses Newtonian gravitation for the laser and the space ducks:
+      F = G * (m_planet * m_body) / r^2.
+      The force direction points from each object toward the planet. Because the direction
+      and magnitude change every frame, the laser and ducks curve instead of moving straight.
+    -->
+  </body>
+</html>
