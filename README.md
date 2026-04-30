@@ -37,6 +37,4 @@ Open `index.html` in a browser.
 - Velocity vectors: `vx`, `vy`, and speed
 - Gravity, wind, and acceleration
 
-## Deployment
 
-This project is ready for GitHub Pages. Upload `index.html` to a public GitHub repository and enable GitHub Pages from the repository settings.
